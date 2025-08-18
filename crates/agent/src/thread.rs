@@ -2487,9 +2487,10 @@ impl Thread {
                 && let Ok(Ok(save_task)) = cx.update(|cx| {
                     thread_store
                         .update(cx, |thread_store, cx| thread_store.save_thread(&thread, cx))
-                }) {
-                    save_task.await.log_err();
-                }
+                })
+            {
+                save_task.await.log_err();
+            }
 
             Some(())
         });
@@ -2738,12 +2739,13 @@ impl Thread {
         cx: &mut Context<Self>,
     ) {
         if self.all_tools_finished()
-            && let Some(ConfiguredModel { model, .. }) = self.configured_model.as_ref() {
-                if !canceled {
-                    self.send_to_model(model.clone(), CompletionIntent::ToolResults, window, cx);
-                }
-                self.auto_capture_telemetry(cx);
+            && let Some(ConfiguredModel { model, .. }) = self.configured_model.as_ref()
+        {
+            if !canceled {
+                self.send_to_model(model.clone(), CompletionIntent::ToolResults, window, cx);
             }
+            self.auto_capture_telemetry(cx);
+        }
 
         cx.emit(ThreadEvent::ToolFinished {
             tool_use_id,
@@ -2930,10 +2932,11 @@ impl Thread {
                 for buffer_handle in buffer_store.read(app_cx).buffers() {
                     let buffer = buffer_handle.read(app_cx);
                     if buffer.is_dirty()
-                        && let Some(file) = buffer.file() {
-                            let path = file.path().to_string_lossy().to_string();
-                            unsaved_buffers.push(path);
-                        }
+                        && let Some(file) = buffer.file()
+                    {
+                        let path = file.path().to_string_lossy().to_string();
+                        unsaved_buffers.push(path);
+                    }
                 }
             })
             .ok();
@@ -3149,9 +3152,10 @@ impl Thread {
 
         let now = Instant::now();
         if let Some(last) = self.last_auto_capture_at
-            && now.duration_since(last).as_secs() < 10 {
-                return;
-            }
+            && now.duration_since(last).as_secs() < 10
+        {
+            return;
+        }
 
         self.last_auto_capture_at = Some(now);
 
@@ -3169,17 +3173,18 @@ impl Thread {
         cx.background_executor()
             .spawn(async move {
                 if let Ok(serialized_thread) = serialize_task.await
-                    && let Ok(thread_data) = serde_json::to_value(serialized_thread) {
-                        telemetry::event!(
-                            "Agent Thread Auto-Captured",
-                            thread_id = thread_id.to_string(),
-                            thread_data = thread_data,
-                            auto_capture_reason = "tracked_user",
-                            github_login = github_login
-                        );
+                    && let Ok(thread_data) = serde_json::to_value(serialized_thread)
+                {
+                    telemetry::event!(
+                        "Agent Thread Auto-Captured",
+                        thread_id = thread_id.to_string(),
+                        thread_data = thread_data,
+                        auto_capture_reason = "tracked_user",
+                        github_login = github_login
+                    );
 
-                        client.telemetry().flush_events().await;
-                    }
+                    client.telemetry().flush_events().await;
+                }
             })
             .detach();
     }
@@ -3227,12 +3232,13 @@ impl Thread {
             .max_token_count_for_mode(self.completion_mode().into());
 
         if let Some(exceeded_error) = &self.exceeded_window_error
-            && model.model.id() == exceeded_error.model_id {
-                return Some(TotalTokenUsage {
-                    total: exceeded_error.token_count,
-                    max,
-                });
-            }
+            && model.model.id() == exceeded_error.model_id
+        {
+            return Some(TotalTokenUsage {
+                total: exceeded_error.token_count,
+                max,
+            });
+        }
 
         let total = self
             .token_usage_at_last_message()
