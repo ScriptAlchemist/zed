@@ -6,31 +6,31 @@ use futures::{Stream, StreamExt as _};
 use gpui::{
     BackgroundExecutor, ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream, Task,
 };
-use libwebrtc::native::{apm, audio_mixer, audio_resampler};
+use libwebrtc::native::{apm, audio_resampler};
 use livekit::track;
 
 use livekit::webrtc::{
     audio_frame::AudioFrame,
     audio_source::{AudioSourceOptions, RtcAudioSource, native::NativeAudioSource},
-    audio_stream::native::NativeAudioStream,
     video_frame::{VideoBuffer, VideoFrame, VideoRotation},
     video_source::{RtcVideoSource, VideoResolution, native::NativeVideoSource},
     video_stream::native::NativeVideoStream,
 };
 use parking_lot::Mutex;
+use rodio::Source;
 use std::cell::RefCell;
 use std::sync::Weak;
-use std::sync::atomic::{self, AtomicI32};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use std::{borrow::Cow, collections::VecDeque, sync::Arc, thread};
+use std::{borrow::Cow, sync::Arc, thread};
 use util::{ResultExt as _, maybe};
+
+mod tomato;
 
 pub(crate) struct AudioStack {
     executor: BackgroundExecutor,
     apm: Arc<Mutex<apm::AudioProcessingModule>>,
-    mixer: Arc<Mutex<audio_mixer::AudioMixer>>,
     _output_task: RefCell<Weak<Task<()>>>,
-    next_ssrc: AtomicI32,
 }
 
 // NOTE: We use WebRTC's mixer which only supports
@@ -45,53 +45,31 @@ impl AudioStack {
         let apm = Arc::new(Mutex::new(apm::AudioProcessingModule::new(
             true, true, true, true,
         )));
-        let mixer = Arc::new(Mutex::new(audio_mixer::AudioMixer::new()));
         Self {
             executor,
             apm,
-            mixer,
             _output_task: RefCell::new(Weak::new()),
-            next_ssrc: AtomicI32::new(1),
         }
     }
 
     pub(crate) fn play_remote_audio_track(
-        &self,
         track: &livekit::track::RemoteAudioTrack,
+        cx: &mut gpui::App,
     ) -> AudioStream {
-        let output_task = self.start_output();
-
-        let next_ssrc = self.next_ssrc.fetch_add(1, atomic::Ordering::Relaxed);
-        let source = AudioMixerSource {
-            ssrc: next_ssrc,
-            sample_rate: SAMPLE_RATE,
-            num_channels: NUM_CHANNELS,
-            buffer: Arc::default(),
-        };
-        self.mixer.lock().add_source(source.clone());
-
-        let mut stream = NativeAudioStream::new(
-            track.rtc_track(),
-            source.sample_rate as i32,
-            source.num_channels as i32,
-        );
-
-        let receive_task = self.executor.spawn({
-            let source = source.clone();
-            async move {
-                while let Some(frame) = stream.next().await {
-                    source.receive(frame);
+        let stop_handle = Arc::new(AtomicBool::new(false));
+        let stop_handle_clone = stop_handle.clone();
+        let stream = LiveKitStream::new(cx.background_executor(), track)
+            .stoppable()
+            .periodic_access(Duration::from_millis(50), move |s| {
+                if stop_handle.load(Ordering::Relaxed) {
+                    s.stop();
                 }
-            }
-        });
+            });
+        audio::Audio::play_source(stream, cx).unwrap(); // todo dvdsk fix unwrap
 
-        let mixer = self.mixer.clone();
         let on_drop = util::defer(move || {
-            mixer.lock().remove_source(source.ssrc);
-            drop(receive_task);
-            drop(output_task);
+            stop_handle_clone.store(true, Ordering::Relaxed);
         });
-
         AudioStream::Output {
             _drop: Box::new(on_drop),
         }
@@ -138,95 +116,6 @@ impl AudioStack {
                 _drop: Box::new(on_drop),
             },
         ));
-    }
-
-    fn start_output(&self) -> Arc<Task<()>> {
-        if let Some(task) = self._output_task.borrow().upgrade() {
-            return task;
-        }
-        let task = Arc::new(self.executor.spawn({
-            let apm = self.apm.clone();
-            let mixer = self.mixer.clone();
-            async move {
-                Self::play_output(apm, mixer, SAMPLE_RATE, NUM_CHANNELS)
-                    .await
-                    .log_err();
-            }
-        }));
-        *self._output_task.borrow_mut() = Arc::downgrade(&task);
-        task
-    }
-
-    async fn play_output(
-        apm: Arc<Mutex<apm::AudioProcessingModule>>,
-        mixer: Arc<Mutex<audio_mixer::AudioMixer>>,
-        sample_rate: u32,
-        num_channels: u32,
-    ) -> Result<()> {
-        loop {
-            let mut device_change_listener = DeviceChangeListener::new(false)?;
-            let (output_device, output_config) = crate::default_device(false)?;
-            let (end_on_drop_tx, end_on_drop_rx) = std::sync::mpsc::channel::<()>();
-            let mixer = mixer.clone();
-            let apm = apm.clone();
-            let mut resampler = audio_resampler::AudioResampler::default();
-            let mut buf = Vec::new();
-
-            thread::spawn(move || {
-                let output_stream = output_device.build_output_stream(
-                    &output_config.config(),
-                    {
-                        move |mut data, _info| {
-                            while data.len() > 0 {
-                                if data.len() <= buf.len() {
-                                    let rest = buf.split_off(data.len());
-                                    data.copy_from_slice(&buf);
-                                    buf = rest;
-                                    return;
-                                }
-                                if buf.len() > 0 {
-                                    let (prefix, suffix) = data.split_at_mut(buf.len());
-                                    prefix.copy_from_slice(&buf);
-                                    data = suffix;
-                                }
-
-                                let mut mixer = mixer.lock();
-                                let mixed = mixer.mix(output_config.channels() as usize);
-                                let sampled = resampler.remix_and_resample(
-                                    mixed,
-                                    sample_rate / 100,
-                                    num_channels,
-                                    sample_rate,
-                                    output_config.channels() as u32,
-                                    output_config.sample_rate().0,
-                                );
-                                buf = sampled.to_vec();
-                                apm.lock()
-                                    .process_reverse_stream(
-                                        &mut buf,
-                                        output_config.sample_rate().0 as i32,
-                                        output_config.channels() as i32,
-                                    )
-                                    .ok();
-                            }
-                        }
-                    },
-                    |error| log::error!("error playing audio track: {:?}", error),
-                    Some(Duration::from_millis(100)),
-                );
-
-                let Some(output_stream) = output_stream.log_err() else {
-                    return;
-                };
-
-                output_stream.play().log_err();
-                // Block forever to keep the output stream alive
-                end_on_drop_rx.recv().ok();
-            });
-
-            device_change_listener.next().await;
-            drop(end_on_drop_tx)
-        }
     }
 
     async fn capture_input(
@@ -321,6 +210,8 @@ impl AudioStack {
     }
 }
 
+use crate::livekit_client::playback::tomato::LiveKitStream;
+
 use super::LocalVideoTrack;
 
 pub enum AudioStream {
@@ -363,50 +254,6 @@ pub(crate) async fn capture_local_video_track(
         )),
         capture_stream,
     ))
-}
-
-#[derive(Clone)]
-struct AudioMixerSource {
-    ssrc: i32,
-    sample_rate: u32,
-    num_channels: u32,
-    buffer: Arc<Mutex<VecDeque<Vec<i16>>>>,
-}
-
-impl AudioMixerSource {
-    fn receive(&self, frame: AudioFrame) {
-        assert_eq!(
-            frame.data.len() as u32,
-            self.sample_rate * self.num_channels / 100
-        );
-
-        let mut buffer = self.buffer.lock();
-        buffer.push_back(frame.data.to_vec());
-        while buffer.len() > 10 {
-            buffer.pop_front();
-        }
-    }
-}
-
-impl libwebrtc::native::audio_mixer::AudioMixerSource for AudioMixerSource {
-    fn ssrc(&self) -> i32 {
-        self.ssrc
-    }
-
-    fn preferred_sample_rate(&self) -> u32 {
-        self.sample_rate
-    }
-
-    fn get_audio_frame_with_info<'a>(&self, target_sample_rate: u32) -> Option<AudioFrame<'_>> {
-        assert_eq!(self.sample_rate, target_sample_rate);
-        let buf = self.buffer.lock().pop_front()?;
-        Some(AudioFrame {
-            data: Cow::Owned(buf),
-            sample_rate: self.sample_rate,
-            num_channels: self.num_channels,
-            samples_per_channel: self.sample_rate / 100,
-        })
-    }
 }
 
 pub fn play_remote_video_track(

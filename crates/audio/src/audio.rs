@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use assets::SoundRegistry;
 use derive_more::{Deref, DerefMut};
 use gpui::{App, AssetSource, BorrowAppContext, Global};
@@ -5,6 +6,9 @@ use rodio::{OutputStream, OutputStreamBuilder};
 use util::ResultExt;
 
 mod assets;
+
+// dvdsk todo: DeviceChangeListener needs to be implemented in rodio
+// ideally for all platforms.
 
 pub fn init(source: impl AssetSource, cx: &mut App) {
     SoundRegistry::set_global(source, cx);
@@ -56,6 +60,24 @@ impl Audio {
         }
 
         self.output_handle.as_ref()
+    }
+
+    pub fn play_source(
+        source: impl rodio::Source + Send + 'static,
+        cx: &mut App,
+    ) -> anyhow::Result<()> {
+        // todo dvdsk: how to ensure we always have this global?
+        if !cx.has_global::<GlobalAudio>() {
+            return Err(anyhow!("Could not play, global missing"));
+        }
+
+        cx.update_global::<GlobalAudio, _>(|this, _cx| {
+            let output_handle = this
+                .ensure_output_exists()
+                .ok_or_else(|| anyhow!("Could not open audio output"))?;
+            output_handle.mixer().add(source);
+            Ok(())
+        })
     }
 
     pub fn play_sound(sound: Sound, cx: &mut App) {

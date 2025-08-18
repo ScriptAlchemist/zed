@@ -8,8 +8,6 @@ use gpui_tokio::Tokio;
 use playback::capture_local_video_track;
 
 mod playback;
-#[cfg(feature = "record-microphone")]
-mod record;
 
 use crate::{LocalTrack, Participant, RemoteTrack, RoomEvent, TrackPublication};
 pub use playback::AudioStream;
@@ -125,9 +123,9 @@ impl Room {
     pub fn play_remote_audio_track(
         &self,
         track: &RemoteAudioTrack,
-        _cx: &App,
+        cx: &mut App,
     ) -> Result<playback::AudioStream> {
-        Ok(self.playback.play_remote_audio_track(&track.0))
+        Ok(playback::AudioStack::play_remote_audio_track(&track.0, cx))
     }
 }
 
