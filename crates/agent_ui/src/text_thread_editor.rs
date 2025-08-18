@@ -745,8 +745,7 @@ impl TextThreadEditor {
     ) {
         if let Some(invoked_slash_command) =
             self.context.read(cx).invoked_slash_command(&command_id)
-        {
-            if let InvokedSlashCommandStatus::Finished = invoked_slash_command.status {
+            && let InvokedSlashCommandStatus::Finished = invoked_slash_command.status {
                 let run_commands_in_ranges = invoked_slash_command
                     .run_commands_in_ranges
                     .iter()
@@ -773,7 +772,6 @@ impl TextThreadEditor {
                     }
                 }
             }
-        }
 
         self.editor.update(cx, |editor, cx| {
             if let Some(invoked_slash_command) =

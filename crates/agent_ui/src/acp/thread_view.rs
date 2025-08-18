@@ -474,12 +474,11 @@ impl AcpThreadView {
     }
 
     fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(thread) = self.thread() {
-            if thread.read(cx).status() != ThreadStatus::Idle {
+        if let Some(thread) = self.thread()
+            && thread.read(cx).status() != ThreadStatus::Idle {
                 self.stop_current_and_send_new_message(window, cx);
                 return;
             }
-        }
 
         let contents = self
             .message_editor
@@ -555,8 +554,8 @@ impl AcpThreadView {
             return;
         };
 
-        if let Some(index) = self.editing_message.take() {
-            if let Some(editor) = self
+        if let Some(index) = self.editing_message.take()
+            && let Some(editor) = self
                 .entry_view_state
                 .read(cx)
                 .entry(index)
@@ -573,8 +572,7 @@ impl AcpThreadView {
                         editor.set_message(user_message.chunks.clone(), window, cx);
                     }
                 })
-            }
-        };
+            };
         self.focus_handle(cx).focus(window);
         cx.notify();
     }
@@ -2989,8 +2987,7 @@ impl AcpThreadView {
                 })
             })
             .log_err()
-        {
-            if let Some(pop_up) = screen_window.entity(cx).log_err() {
+            && let Some(pop_up) = screen_window.entity(cx).log_err() {
                 self.notification_subscriptions
                     .entry(screen_window)
                     .or_insert_with(Vec::new)
@@ -3035,17 +3032,15 @@ impl AcpThreadView {
                         let pop_up_weak = pop_up.downgrade();
 
                         cx.observe_window_activation(window, move |_, window, cx| {
-                            if window.is_window_active() {
-                                if let Some(pop_up) = pop_up_weak.upgrade() {
+                            if window.is_window_active()
+                                && let Some(pop_up) = pop_up_weak.upgrade() {
                                     pop_up.update(cx, |_, cx| {
                                         cx.emit(AgentNotificationEvent::Dismissed);
                                     });
                                 }
-                            }
                         })
                     });
             }
-        }
     }
 
     fn dismiss_notifications(&mut self, cx: &mut Context<Self>) {

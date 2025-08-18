@@ -285,9 +285,9 @@ impl Interactivity {
     {
         self.mouse_move_listeners
             .push(Box::new(move |event, phase, hitbox, window, cx| {
-                if phase == DispatchPhase::Capture {
-                    if let Some(drag) = &cx.active_drag {
-                        if drag.value.as_ref().type_id() == TypeId::of::<T>() {
+                if phase == DispatchPhase::Capture
+                    && let Some(drag) = &cx.active_drag
+                        && drag.value.as_ref().type_id() == TypeId::of::<T>() {
                             (listener)(
                                 &DragMoveEvent {
                                     event: event.clone(),
@@ -299,8 +299,6 @@ impl Interactivity {
                                 cx,
                             );
                         }
-                    }
-                }
             }));
     }
 
@@ -1509,8 +1507,8 @@ impl Interactivity {
                 let mut element_state =
                     element_state.map(|element_state| element_state.unwrap_or_default());
 
-                if let Some(element_state) = element_state.as_ref() {
-                    if cx.has_active_drag() {
+                if let Some(element_state) = element_state.as_ref()
+                    && cx.has_active_drag() {
                         if let Some(pending_mouse_down) = element_state.pending_mouse_down.as_ref()
                         {
                             *pending_mouse_down.borrow_mut() = None;
@@ -1519,14 +1517,13 @@ impl Interactivity {
                             *clicked_state.borrow_mut() = ElementClickedState::default();
                         }
                     }
-                }
 
                 // Ensure we store a focus handle in our element state if we're focusable.
                 // If there's an explicit focus handle we're tracking, use that. Otherwise
                 // create a new handle and store it in the element state, which lives for as
                 // as frames contain an element with this id.
-                if self.focusable && self.tracked_focus_handle.is_none() {
-                    if let Some(element_state) = element_state.as_mut() {
+                if self.focusable && self.tracked_focus_handle.is_none()
+                    && let Some(element_state) = element_state.as_mut() {
                         let mut handle = element_state
                             .focus_handle
                             .get_or_insert_with(|| cx.focus_handle())
@@ -1539,14 +1536,12 @@ impl Interactivity {
 
                         self.tracked_focus_handle = Some(handle);
                     }
-                }
 
                 if let Some(scroll_handle) = self.tracked_scroll_handle.as_ref() {
                     self.scroll_offset = Some(scroll_handle.0.borrow().offset.clone());
-                } else if self.base_style.overflow.x == Some(Overflow::Scroll)
-                    || self.base_style.overflow.y == Some(Overflow::Scroll)
-                {
-                    if let Some(element_state) = element_state.as_mut() {
+                } else if (self.base_style.overflow.x == Some(Overflow::Scroll)
+                    || self.base_style.overflow.y == Some(Overflow::Scroll))
+                    && let Some(element_state) = element_state.as_mut() {
                         self.scroll_offset = Some(
                             element_state
                                 .scroll_offset
@@ -1554,7 +1549,6 @@ impl Interactivity {
                                 .clone(),
                         );
                     }
-                }
 
                 let style = self.compute_style_internal(None, element_state.as_mut(), window, cx);
                 let layout_id = f(style, window, cx);
@@ -2026,8 +2020,8 @@ impl Interactivity {
             let hitbox = hitbox.clone();
             window.on_mouse_event({
                 move |_: &MouseUpEvent, phase, window, cx| {
-                    if let Some(drag) = &cx.active_drag {
-                        if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
+                    if let Some(drag) = &cx.active_drag
+                        && phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
                             let drag_state_type = drag.value.as_ref().type_id();
                             for (drop_state_type, listener) in &drop_listeners {
                                 if *drop_state_type == drag_state_type {
@@ -2049,7 +2043,6 @@ impl Interactivity {
                                 }
                             }
                         }
-                    }
                 }
             });
         }
@@ -2089,12 +2082,11 @@ impl Interactivity {
                         }
 
                         let mut pending_mouse_down = pending_mouse_down.borrow_mut();
-                        if let Some(mouse_down) = pending_mouse_down.clone() {
-                            if !cx.has_active_drag()
+                        if let Some(mouse_down) = pending_mouse_down.clone()
+                            && !cx.has_active_drag()
                                 && (event.position - mouse_down.position).magnitude()
                                     > DRAG_THRESHOLD
-                            {
-                                if let Some((drag_value, drag_listener)) = drag_listener.take() {
+                                && let Some((drag_value, drag_listener)) = drag_listener.take() {
                                     *clicked_state.borrow_mut() = ElementClickedState::default();
                                     let cursor_offset = event.position - hitbox.origin;
                                     let drag = (drag_listener)(
@@ -2113,8 +2105,6 @@ impl Interactivity {
                                     window.refresh();
                                     cx.stop_propagation();
                                 }
-                            }
-                        }
                     }
                 });
 
@@ -2423,34 +2413,29 @@ impl Interactivity {
         style.refine(&self.base_style);
 
         if let Some(focus_handle) = self.tracked_focus_handle.as_ref() {
-            if let Some(in_focus_style) = self.in_focus_style.as_ref() {
-                if focus_handle.within_focused(window, cx) {
+            if let Some(in_focus_style) = self.in_focus_style.as_ref()
+                && focus_handle.within_focused(window, cx) {
                     style.refine(in_focus_style);
                 }
-            }
 
-            if let Some(focus_style) = self.focus_style.as_ref() {
-                if focus_handle.is_focused(window) {
+            if let Some(focus_style) = self.focus_style.as_ref()
+                && focus_handle.is_focused(window) {
                     style.refine(focus_style);
                 }
-            }
         }
 
         if let Some(hitbox) = hitbox {
             if !cx.has_active_drag() {
-                if let Some(group_hover) = self.group_hover_style.as_ref() {
-                    if let Some(group_hitbox_id) = GroupHitboxes::get(&group_hover.group, cx) {
-                        if group_hitbox_id.is_hovered(window) {
+                if let Some(group_hover) = self.group_hover_style.as_ref()
+                    && let Some(group_hitbox_id) = GroupHitboxes::get(&group_hover.group, cx)
+                        && group_hitbox_id.is_hovered(window) {
                             style.refine(&group_hover.style);
                         }
-                    }
-                }
 
-                if let Some(hover_style) = self.hover_style.as_ref() {
-                    if hitbox.is_hovered(window) {
+                if let Some(hover_style) = self.hover_style.as_ref()
+                    && hitbox.is_hovered(window) {
                         style.refine(hover_style);
                     }
-                }
             }
 
             if let Some(drag) = cx.active_drag.take() {
@@ -2463,13 +2448,11 @@ impl Interactivity {
                     for (state_type, group_drag_style) in &self.group_drag_over_styles {
                         if let Some(group_hitbox_id) =
                             GroupHitboxes::get(&group_drag_style.group, cx)
-                        {
-                            if *state_type == drag.value.as_ref().type_id()
+                            && *state_type == drag.value.as_ref().type_id()
                                 && group_hitbox_id.is_hovered(window)
                             {
                                 style.refine(&group_drag_style.style);
                             }
-                        }
                     }
 
                     for (state_type, build_drag_over_style) in &self.drag_over_styles {
@@ -2490,17 +2473,15 @@ impl Interactivity {
                 .clicked_state
                 .get_or_insert_with(Default::default)
                 .borrow();
-            if clicked_state.group {
-                if let Some(group) = self.group_active_style.as_ref() {
+            if clicked_state.group
+                && let Some(group) = self.group_active_style.as_ref() {
                     style.refine(&group.style)
                 }
-            }
 
-            if let Some(active_style) = self.active_style.as_ref() {
-                if clicked_state.element {
+            if let Some(active_style) = self.active_style.as_ref()
+                && clicked_state.element {
                     style.refine(active_style)
                 }
-            }
         }
 
         style
