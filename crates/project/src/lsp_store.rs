@@ -8165,12 +8165,8 @@ impl LspStore {
                         lsp_request_id,
                         cx.spawn(async move |lsp_store, cx| {
                             let references = references_task.await;
-                            let send_response_task = lsp_store
+                            lsp_store
                                 .update(cx, |lsp_store, cx| {
-                                    dbg!(
-                                        lsp_store.upstream_client().is_some(),
-                                        lsp_store.as_remote().is_some()
-                                    );
                                     if let Some((client, project_id)) =
                                         lsp_store.downstream_client.clone()
                                     {
@@ -8189,24 +8185,21 @@ impl LspStore {
                                                 )
                                             })
                                             .collect::<HashMap<_, _>>();
-                                        Some(client.send_lsp_response::<proto::GetReferences>(
-                                            project_id,
-                                            lsp_request_id,
-                                            response,
-                                        ))
-                                    } else {
-                                        None
+                                        let send_result = client
+                                            .send_lsp_response::<proto::GetReferences>(
+                                                project_id,
+                                                lsp_request_id,
+                                                response,
+                                            );
+                                        match send_result {
+                                            Ok(()) => {}
+                                            Err(e) => {
+                                                log::error!("Failed to send LSP response: {e:#}")
+                                            }
+                                        }
                                     }
                                 })
-                                .ok()
-                                .flatten();
-
-                            if let Some(send_result) = send_response_task {
-                                match dbg!(send_result) {
-                                    Ok(()) => {}
-                                    Err(e) => log::error!("Failed to send LSP response: {e:#}"),
-                                }
-                            }
+                                .ok();
                         }),
                     );
                 })?;
@@ -8249,10 +8242,6 @@ impl LspStore {
                                     if let Some((client, project_id)) =
                                         lsp_store.downstream_client.clone()
                                     {
-                                        dbg!((
-                                            lsp_store.upstream_client().is_some(),
-                                            lsp_store.as_remote().is_some(),
-                                        ));
                                         let response = colors
                                             .into_iter()
                                             .map(|(server_id, colors)| {
@@ -8274,7 +8263,7 @@ impl LspStore {
                                                 lsp_request_id,
                                                 response,
                                             );
-                                        match dbg!(send_result) {
+                                        match send_result {
                                             Ok(()) => {}
                                             Err(e) => {
                                                 log::error!("Failed to send LSP response: {e:#}")
@@ -8298,16 +8287,8 @@ impl LspStore {
         envelope: TypedEnvelope<proto::LspQueryResponse>,
         mut cx: AsyncApp,
     ) -> Result<()> {
-        dbg!("????????????????");
         lsp_store.read_with(&mut cx, |lsp_store, _| {
-            dbg!((
-                "1",
-                lsp_store.as_remote().is_some(),
-                lsp_store.upstream_client().is_some(),
-                lsp_store.downstream_client.is_some()
-            ));
             if let Some((upstream_client, _)) = lsp_store.upstream_client() {
-                dbg!("2");
                 upstream_client.handle_lsp_response(envelope.clone());
             }
         })?;
