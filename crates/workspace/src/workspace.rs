@@ -7153,6 +7153,7 @@ pub struct OpenOptions {
     pub visible: Option<OpenVisible>,
     pub focus: Option<bool>,
     pub open_new_workspace: Option<bool>,
+    pub window_id: Option<u64>,
     pub replace_window: Option<WindowHandle<Workspace>>,
     pub env: Option<HashMap<String, String>>,
 }
@@ -7175,7 +7176,19 @@ pub fn open_paths(
     let mut open_visible = OpenVisible::All;
 
     cx.spawn(async move |cx| {
-        if open_options.open_new_workspace != Some(true) {
+        if let Some(window_id) = open_options.window_id {
+            cx.update(|cx| {
+                for window in local_workspace_windows(cx) {
+                    if window.window_id().as_u64() == window_id {
+                        existing = Some(window);
+                        break;
+                    }
+                }
+            })
+            .ok();
+        }
+
+        if existing.is_none() && open_options.open_new_workspace != Some(true) {
             let all_paths = abs_paths.iter().map(|path| app_state.fs.metadata(path));
             let all_metadatas = futures::future::join_all(all_paths)
                 .await

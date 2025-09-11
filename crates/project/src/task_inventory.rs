@@ -1065,6 +1065,12 @@ impl ContextProvider for BasicContextProvider {
             task_variables.insert(VariableName::File, path_as_string);
         }
 
+        if let Some(active_window) = cx.active_window() {
+            task_variables.insert(
+                VariableName::WindowId,
+                active_window.window_id().as_u64().to_string(),
+            );
+        }
         Task::ready(Ok(task_variables))
     }
 }

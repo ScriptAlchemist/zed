@@ -17,6 +17,7 @@ pub enum CliRequest {
         wsl: Option<String>,
         wait: bool,
         open_new_workspace: Option<bool>,
+        window_id: Option<u64>,
         env: Option<HashMap<String, String>>,
         user_data_dir: Option<String>,
     },
