@@ -61,6 +61,9 @@ struct Args {
     /// Create a new workspace
     #[arg(short, long, overrides_with = "add")]
     new: bool,
+    /// Open the given paths in a specific window.
+    #[arg(short, long, value_name = "WINDOW_ID")]
+    window: Option<u64>,
     /// Sets a custom directory for all user data (e.g., database, extensions, logs).
     /// This overrides the default platform-specific data directory location.
     /// On macOS, the default is `~/Library/Application Support/Zed`.
@@ -358,6 +361,7 @@ fn main() -> Result<()> {
                 wsl,
                 wait: args.wait,
                 open_new_workspace,
+                window_id: args.window,
                 env,
                 user_data_dir: user_data_dir_for_thread,
             })?;

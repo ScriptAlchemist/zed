@@ -514,6 +514,14 @@ mod tests {
             })
             .await;
 
+        let window_id = first_context
+            .active_context()
+            .expect("Should have an active context")
+            .task_variables
+            .get(&VariableName::WindowId)
+            .unwrap()
+            .to_string();
+
         assert_eq!(
             first_context
                 .active_context()
@@ -530,6 +538,7 @@ mod tests {
                     (VariableName::WorktreeRoot, path!("/dir").into()),
                     (VariableName::Row, "1".into()),
                     (VariableName::Column, "1".into()),
+                    (VariableName::WindowId, window_id),
                 ]),
                 project_env: HashMap::default(),
             }
@@ -542,12 +551,22 @@ mod tests {
             })
         });
 
+        let second_context = workspace
+            .update_in(cx, |workspace, window, cx| {
+                task_contexts(workspace, window, cx)
+            })
+            .await;
+
+        let window_id2 = second_context
+            .active_context()
+            .expect("Should have an active context")
+            .task_variables
+            .get(&VariableName::WindowId)
+            .unwrap()
+            .to_string();
+
         assert_eq!(
-            workspace
-                .update_in(cx, |workspace, window, cx| {
-                    task_contexts(workspace, window, cx)
-                })
-                .await
+            second_context
                 .active_context()
                 .expect("Should have an active context"),
             &TaskContext {
@@ -564,19 +583,30 @@ mod tests {
                     (VariableName::Column, "15".into()),
                     (VariableName::SelectedText, "is_i".into()),
                     (VariableName::Symbol, "this_is_a_rust_file".into()),
+                    (VariableName::WindowId, window_id2),
                 ]),
                 project_env: HashMap::default(),
             }
         );
 
+        let third_context = workspace
+            .update_in(cx, |workspace, window, cx| {
+                // Now, let's switch the active item to .ts file.
+                workspace.activate_item(&editor1, true, true, window, cx);
+                task_contexts(workspace, window, cx)
+            })
+            .await;
+
+        let window_id3 = third_context
+            .active_context()
+            .expect("Should have an active context")
+            .task_variables
+            .get(&VariableName::WindowId)
+            .unwrap()
+            .to_string();
+
         assert_eq!(
-            workspace
-                .update_in(cx, |workspace, window, cx| {
-                    // Now, let's switch the active item to .ts file.
-                    workspace.activate_item(&editor1, true, true, window, cx);
-                    task_contexts(workspace, window, cx)
-                })
-                .await
+            third_context
                 .active_context()
                 .expect("Should have an active context"),
             &TaskContext {
@@ -592,6 +622,7 @@ mod tests {
                     (VariableName::Row, "1".into()),
                     (VariableName::Column, "1".into()),
                     (VariableName::Symbol, "this_is_a_test".into()),
+                    (VariableName::WindowId, window_id3),
                 ]),
                 project_env: HashMap::default(),
             }

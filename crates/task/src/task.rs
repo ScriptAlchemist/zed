@@ -163,6 +163,8 @@ pub enum VariableName {
     Stem,
     /// An absolute path of the currently opened worktree, that contains the file.
     WorktreeRoot,
+    /// Identifier of the currently active window.
+    WindowId,
     /// A symbol text, that contains latest cursor/selection position.
     Symbol,
     /// A row with the latest cursor/selection position.
@@ -202,6 +204,7 @@ impl FromStr for VariableName {
             "DIRNAME" => Self::Dirname,
             "STEM" => Self::Stem,
             "WORKTREE_ROOT" => Self::WorktreeRoot,
+            "WINDOW_ID" => Self::WindowId,
             "SYMBOL" => Self::Symbol,
             "RUNNABLE_SYMBOL" => Self::RunnableSymbol,
             "SELECTED_TEXT" => Self::SelectedText,
@@ -235,6 +238,7 @@ impl std::fmt::Display for VariableName {
             Self::Dirname => write!(f, "{ZED_VARIABLE_NAME_PREFIX}DIRNAME"),
             Self::Stem => write!(f, "{ZED_VARIABLE_NAME_PREFIX}STEM"),
             Self::WorktreeRoot => write!(f, "{ZED_VARIABLE_NAME_PREFIX}WORKTREE_ROOT"),
+            Self::WindowId => write!(f, "{ZED_VARIABLE_NAME_PREFIX}WINDOW_ID"),
             Self::Symbol => write!(f, "{ZED_VARIABLE_NAME_PREFIX}SYMBOL"),
             Self::Row => write!(f, "{ZED_VARIABLE_NAME_PREFIX}ROW"),
             Self::Column => write!(f, "{ZED_VARIABLE_NAME_PREFIX}COLUMN"),
